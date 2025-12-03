@@ -106,20 +106,23 @@ class MambaQuaternionLiteBlock(nn.Module):
         # Quaternion injections and projections
         B_t = self.B_proj(x).view(batch, seq_len, q_channels, self.state_dim, 4)
         C_t = self.C_proj(x).view(batch, seq_len, q_channels, self.state_dim, 4)
-        skip_all = self.skip(x).view(batch, seq_len, q_channels, 4)
 
-        # Vectorized scalar SSM recurrence using cumulative products:
-        #   h_t = A_t h_{t-1} + b_t
-        #   h_t = P_t * cumsum(b_t / P_t) where P_t = cumprod(A_t)
-        b_term = (B_t * S.unsqueeze(-2)).sum(dim=-1)
-        P = torch.cumprod(A, dim=1)
-        # Avoid division by zero while keeping stability of bilinear discretization
-        u = b_term / (P + 1e-6)
-        h = P * torch.cumsum(u, dim=1)
+        # Internal real state
+        h = torch.zeros(batch, q_channels, self.state_dim, device=x.device, dtype=x.dtype)
+        outputs = []
 
-        state_out = (C_t * h.unsqueeze(-1)).sum(dim=-2)
-        skip_out = skip_all * S
-        y = (state_out + skip_out).view(batch, seq_len, self.d_model)
+        for t in range(seq_len):
+            # Inject gated signal into the real state via quaternion dot-product
+            b_term = (B_t[:, t] * S[:, t].unsqueeze(-2)).sum(dim=-1)
+            h = A[:, t] * h + b_term
+
+            # Quaternion projection of the real state
+            state_out = (C_t[:, t] * h.unsqueeze(-1)).sum(dim=-2)
+            skip_out = self.skip(x[:, t]).view(batch, q_channels, 4) * S[:, t]
+            y_t = state_out + skip_out
+            outputs.append(y_t)
+
+        y = torch.stack(outputs, dim=1).view(batch, seq_len, self.d_model)
         return y
 
 

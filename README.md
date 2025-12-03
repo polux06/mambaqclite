@@ -37,9 +37,8 @@ random data.
 
 ## Next steps
 
-* The block already uses a vectorized scalar SSM recurrence to avoid Python
-  loops; swapping in the official Mamba-2 scan or fused kernels could bring
-  further speedups.
+* Swap the Python loop in the block for a fused kernel or the official Mamba-2
+  scan once available.
 * Add a TinyStories dataloader and training harness using the provided
   GPT-2-style tokenizer (vocab size 2048).
 * Experiment with quaternion initializations and regularization strategies for
